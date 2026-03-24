@@ -37,3 +37,8 @@ htmlcov/
 # Misc
 .tmp/
 .cache/
+
+# Python backend
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
