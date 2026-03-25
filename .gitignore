@@ -17,6 +17,7 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+backend/.env
 
 # Node
 node_modules/
@@ -25,8 +26,10 @@ dist/
 build/
 
 # Python
+backend/.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
 
