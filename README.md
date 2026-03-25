@@ -8,11 +8,19 @@
 - Database: PostgreSQL
 - Batch: Python
 
-## ディレクトリ構成
+## 必要なもの
+- Python
+- Node.js
+- PostgreSQL
+- VS Code
 
-```text
-backend/   # API
-frontend/  # UI
-batch/     # スコア計算バッチ
-infra/     # インフラ関連
-docs/      # 設計資料
+## Backend起動
+```bash
+cd backend
+python -m venv .venv
+# macOS / Linux
+source .venv/bin/activate
+# Windows PowerShell
+# .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload

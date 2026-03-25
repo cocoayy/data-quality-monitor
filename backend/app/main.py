@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from psycopg import connect
+
+from app.config import settings
 
 app = FastAPI(
     title="Data Quality Monitor API",
@@ -15,11 +18,21 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "ok"}
-
-
 @app.get("/")
 def root() -> dict[str, str]:
     return {"message": "Data Quality Monitor API"}
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/db")
+def health_db() -> dict[str, str]:
+    with connect(settings.database_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+            cur.fetchone()
+
+    return {"status": "ok"}
