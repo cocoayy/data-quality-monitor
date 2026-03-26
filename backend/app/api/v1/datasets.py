@@ -58,6 +58,7 @@ def list_datasets() -> dict:
 
     return {"items": items}
 
+
 @router.get("/{dataset_id}")
 def get_dataset(dataset_id: str) -> dict:
     dataset_query = """
@@ -165,4 +166,110 @@ def get_dataset(dataset_id: str) -> dict:
             "measuredAt": dataset["measured_at"].isoformat() if dataset["measured_at"] else None,
         },
         "resources": resource_items,
+    }
+
+
+@router.get("/{dataset_id}/quality-score/history")
+def get_dataset_quality_score_history(dataset_id: str) -> dict:
+    dataset_exists_query = """
+        SELECT 1
+        FROM datasets
+        WHERE id = %s
+    """
+
+    history_query = """
+        SELECT
+            measured_date,
+            completeness_score,
+            freshness_score,
+            accessibility_score,
+            format_quality_score,
+            total_score,
+            rank,
+            evaluation_status
+        FROM quality_score_history
+        WHERE dataset_id = %s
+        ORDER BY measured_date ASC
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(dataset_exists_query, (dataset_id,))
+            exists = cur.fetchone()
+
+            if not exists:
+                raise HTTPException(status_code=404, detail="dataset not found")
+
+            cur.execute(history_query, (dataset_id,))
+            rows = cur.fetchall()
+
+    history = []
+    for row in rows:
+        history.append(
+            {
+                "measuredDate": row["measured_date"].isoformat(),
+                "scores": {
+                    "completeness": row["completeness_score"],
+                    "freshness": row["freshness_score"],
+                    "accessibility": row["accessibility_score"],
+                    "formatQuality": row["format_quality_score"],
+                    "total": row["total_score"],
+                    "rank": row["rank"],
+                    "evaluationStatus": row["evaluation_status"],
+                },
+            }
+        )
+
+    return {
+        "datasetId": dataset_id,
+        "history": history,
+    }
+
+
+@router.get("/{dataset_id}/quality-score/reasons")
+def get_dataset_quality_score_reasons(dataset_id: str) -> dict:
+    dataset_exists_query = """
+        SELECT 1
+        FROM datasets
+        WHERE id = %s
+    """
+
+    reasons_query = """
+        SELECT
+            metric_type,
+            reason_code,
+            severity,
+            message,
+            detail_json
+        FROM quality_score_reasons
+        WHERE dataset_id = %s
+        ORDER BY created_at ASC
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(dataset_exists_query, (dataset_id,))
+            exists = cur.fetchone()
+
+            if not exists:
+                raise HTTPException(status_code=404, detail="dataset not found")
+
+            cur.execute(reasons_query, (dataset_id,))
+            rows = cur.fetchall()
+
+    items = []
+    for row in rows:
+        items.append(
+            {
+                "metricType": row["metric_type"],
+                "reasonCode": row["reason_code"],
+                "severity": row["severity"],
+                "message": row["message"],
+                "detail": row["detail_json"],
+            }
+        )
+
+    return {
+        "datasetId": dataset_id,
+        "items": items,
     }

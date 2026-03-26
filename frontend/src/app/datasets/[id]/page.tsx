@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { fetchDatasetById } from "@/lib/api";
+import {
+  fetchDatasetById,
+  fetchDatasetScoreHistory,
+  fetchDatasetScoreReasons,
+} from "@/lib/api";
+import { ScoreHistoryChart } from "@/components/ScoreHistoryChart";
+import { ScoreReasonsList } from "@/components/ScoreReasonsList";
 
 type PageProps = {
   params: Promise<{
@@ -9,7 +15,12 @@ type PageProps = {
 
 export default async function DatasetDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const dataset = await fetchDatasetById(id);
+
+  const [dataset, history, reasons] = await Promise.all([
+    fetchDatasetById(id),
+    fetchDatasetScoreHistory(id),
+    fetchDatasetScoreReasons(id),
+  ]);
 
   return (
     <main style={{ padding: "32px", fontFamily: "sans-serif" }}>
@@ -98,6 +109,16 @@ export default async function DatasetDetailPage({ params }: PageProps) {
             </div>
           </div>
         </div>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2>スコア履歴</h2>
+        <ScoreHistoryChart history={history.history} />
+      </section>
+
+      <section style={sectionStyle}>
+        <h2>スコア理由</h2>
+        <ScoreReasonsList items={reasons.items} />
       </section>
 
       <section style={sectionStyle}>
