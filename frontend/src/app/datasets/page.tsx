@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { fetchDatasets } from "@/lib/api";
 
 export default async function DatasetsPage() {
@@ -20,15 +21,17 @@ export default async function DatasetsPage() {
             <tr>
               <th style={thStyle}>タイトル</th>
               <th style={thStyle}>ソース種別</th>
+              <th style={thStyle}>総合スコア</th>
+              <th style={thStyle}>ランク</th>
               <th style={thStyle}>最終更新日</th>
               <th style={thStyle}>監視有効</th>
-              <th style={thStyle}>スコア除外</th>
+              <th style={thStyle}>詳細</th>
             </tr>
           </thead>
           <tbody>
             {data.items.length === 0 ? (
               <tr>
-                <td style={tdStyle} colSpan={5}>
+                <td style={tdStyle} colSpan={7}>
                   データがありません
                 </td>
               </tr>
@@ -38,6 +41,12 @@ export default async function DatasetsPage() {
                   <td style={tdStyle}>{dataset.title ?? "-"}</td>
                   <td style={tdStyle}>{dataset.sourceType}</td>
                   <td style={tdStyle}>
+                    {dataset.qualityScore?.total ?? "-"}
+                  </td>
+                  <td style={tdStyle}>
+                    {dataset.qualityScore?.rank ?? "-"}
+                  </td>
+                  <td style={tdStyle}>
                     {dataset.lastUpdated
                       ? new Date(dataset.lastUpdated).toLocaleString("ja-JP")
                       : "-"}
@@ -46,7 +55,7 @@ export default async function DatasetsPage() {
                     {dataset.monitoringEnabled ? "有効" : "無効"}
                   </td>
                   <td style={tdStyle}>
-                    {dataset.excludedFromScoring ? "除外" : "対象"}
+                    <Link href={`/datasets/${dataset.datasetId}`}>詳細</Link>
                   </td>
                 </tr>
               ))
