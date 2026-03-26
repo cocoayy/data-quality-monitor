@@ -6,6 +6,8 @@ import {
 } from "@/lib/api";
 import { ScoreHistoryChart } from "@/components/ScoreHistoryChart";
 import { ScoreReasonsList } from "@/components/ScoreReasonsList";
+import { MonitoringSettingsForm } from "@/components/MonitoringSettingsForm";
+
 
 type PageProps = {
   params: Promise<{
@@ -90,6 +92,18 @@ export default async function DatasetDetailPage({ params }: PageProps) {
           </tbody>
         </table>
       </section>
+
+      
+      <section style={sectionStyle}>
+        <h2>監視設定</h2>
+        <MonitoringSettingsForm
+          datasetId={dataset.datasetId}
+          monitoringEnabled={dataset.monitoringEnabled}
+          excludedFromScoring={dataset.excludedFromScoring}
+          expectedUpdateCycle={dataset.expectedUpdateCycle}
+        />
+      </section>
+
 
       <section style={sectionStyle}>
         <h2>最新スコア</h2>
