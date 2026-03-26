@@ -64,3 +64,34 @@ export type DatasetDetailResponse = {
   };
   resources: DatasetResource[];
 };
+
+export type QualityScoreHistoryItem = {
+  measuredDate: string;
+  scores: {
+    completeness: number | null;
+    freshness: number | null;
+    accessibility: number | null;
+    formatQuality: number | null;
+    total: number | null;
+    rank: string | null;
+    evaluationStatus: string | null;
+  };
+};
+
+export type QualityScoreHistoryResponse = {
+  datasetId: string;
+  history: QualityScoreHistoryItem[];
+};
+
+export type QualityReason = {
+  metricType: string;
+  reasonCode: string;
+  severity: string;
+  message: string;
+  detail: Record<string, unknown> | null;
+};
+
+export type QualityReasonListResponse = {
+  datasetId: string;
+  items: QualityReason[];
+};
