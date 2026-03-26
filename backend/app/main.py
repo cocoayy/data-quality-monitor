@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from psycopg import connect
 
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.datasets import router as datasets_router
+from app.api.v1.organizations import router as organizations_router
 from app.config import settings
 
 app = FastAPI(
@@ -19,7 +21,8 @@ app.add_middleware(
 )
 
 app.include_router(datasets_router)
-
+app.include_router(organizations_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def root() -> dict[str, str]:

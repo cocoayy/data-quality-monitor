@@ -2,6 +2,15 @@ from fastapi import APIRouter, HTTPException
 
 from app.db.connection import get_connection
 
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+class PatchMonitoringSettingsRequest(BaseModel):
+    monitoringEnabled: bool | None = None
+    excludedFromScoring: bool | None = None
+    expectedUpdateCycle: str | None = None
+
+
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 
 
@@ -272,4 +281,65 @@ def get_dataset_quality_score_reasons(dataset_id: str) -> dict:
     return {
         "datasetId": dataset_id,
         "items": items,
+    }
+
+
+@router.patch("/{dataset_id}/monitoring-settings")
+def patch_monitoring_settings(
+    dataset_id: str,
+    request: PatchMonitoringSettingsRequest,
+) -> dict:
+    valid_cycles = {"daily", "weekly", "monthly", "quarterly", "yearly", "unknown"}
+
+    if request.expectedUpdateCycle is not None and request.expectedUpdateCycle not in valid_cycles:
+        raise HTTPException(status_code=422, detail="invalid expectedUpdateCycle")
+
+    update_fields = []
+    params = []
+
+    if request.monitoringEnabled is not None:
+        update_fields.append("monitoring_enabled = %s")
+        params.append(request.monitoringEnabled)
+
+    if request.excludedFromScoring is not None:
+        update_fields.append("excluded_from_scoring = %s")
+        params.append(request.excludedFromScoring)
+
+    if request.expectedUpdateCycle is not None:
+        update_fields.append("expected_update_cycle = %s")
+        params.append(request.expectedUpdateCycle)
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="no fields to update")
+
+    update_fields.append("updated_at = now()")
+    params.append(dataset_id)
+
+    update_query = f"""
+        UPDATE datasets
+        SET {", ".join(update_fields)}
+        WHERE id = %s
+        RETURNING
+            id,
+            monitoring_enabled,
+            excluded_from_scoring,
+            expected_update_cycle,
+            updated_at
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(update_query, params)
+            row = cur.fetchone()
+            conn.commit()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="dataset not found")
+
+    return {
+        "datasetId": str(row["id"]),
+        "monitoringEnabled": row["monitoring_enabled"],
+        "excludedFromScoring": row["excluded_from_scoring"],
+        "expectedUpdateCycle": row["expected_update_cycle"],
+        "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
     }
