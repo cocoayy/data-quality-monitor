@@ -9,6 +9,7 @@ export default function Home() {
       <div style={{ marginTop: "24px", display: "grid", gap: 12 }}>
         <Link href="/dashboard">ダッシュボードを見る</Link>
         <Link href="/datasets">データセット一覧を見る</Link>
+        <Link href="/alerts">アラート一覧を見る</Link>
       </div>
     </main>
   );

@@ -1,4 +1,4 @@
-import { AlertListResponse } from "@/types/alert";
+import { AlertDetail, AlertListResponse } from "@/types/alert";
 import { DashboardSummaryResponse, OrganizationListResponse } from "@/types/dashboard";
 import {
   DatasetDetailResponse,
@@ -26,8 +26,45 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
-export async function fetchDatasets(): Promise<DatasetListResponse> {
-  return fetchJson<DatasetListResponse>("/api/v1/datasets");
+export async function fetchDatasets(params?: {
+  page?: number;
+  pageSize?: number;
+  organizationId?: string;
+  sourceType?: string;
+  monitoringEnabled?: boolean;
+  evaluationStatus?: string;
+  rank?: string;
+  minTotalScore?: number;
+  maxTotalScore?: number;
+  keyword?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}): Promise<DatasetListResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.pageSize) searchParams.set("page_size", String(params.pageSize));
+  if (params?.organizationId) searchParams.set("organization_id", params.organizationId);
+  if (params?.sourceType) searchParams.set("source_type", params.sourceType);
+  if (params?.monitoringEnabled !== undefined) {
+    searchParams.set("monitoring_enabled", String(params.monitoringEnabled));
+  }
+  if (params?.evaluationStatus) searchParams.set("evaluation_status", params.evaluationStatus);
+  if (params?.rank) searchParams.set("rank", params.rank);
+  if (params?.minTotalScore !== undefined) {
+    searchParams.set("min_total_score", String(params.minTotalScore));
+  }
+  if (params?.maxTotalScore !== undefined) {
+    searchParams.set("max_total_score", String(params.maxTotalScore));
+  }
+  if (params?.keyword) searchParams.set("keyword", params.keyword);
+  if (params?.sortBy) searchParams.set("sort_by", params.sortBy);
+  if (params?.sortOrder) searchParams.set("sort_order", params.sortOrder);
+
+  const query = searchParams.toString();
+  return fetchJson<DatasetListResponse>(
+    `/api/v1/datasets${query ? `?${query}` : ""}`,
+  );
 }
 
 export async function fetchDatasetById(
@@ -56,12 +93,21 @@ export async function fetchOrganizations(): Promise<OrganizationListResponse> {
   return fetchJson<OrganizationListResponse>("/api/v1/organizations");
 }
 
-export async function fetchDashboardSummary(): Promise<DashboardSummaryResponse> {
-  return fetchJson<DashboardSummaryResponse>("/api/v1/dashboard/summary");
+export async function fetchDashboardSummary(
+  organizationId?: string,
+): Promise<DashboardSummaryResponse> {
+  const query = organizationId
+    ? `?organization_id=${encodeURIComponent(organizationId)}`
+    : "";
+  return fetchJson<DashboardSummaryResponse>(`/api/v1/dashboard/summary${query}`);
 }
 
 export async function fetchAlerts(): Promise<AlertListResponse> {
   return fetchJson<AlertListResponse>("/api/v1/alerts");
+}
+
+export async function fetchAlertById(alertId: string): Promise<AlertDetail> {
+  return fetchJson<AlertDetail>(`/api/v1/alerts/${alertId}`);
 }
 
 export async function patchMonitoringSettings(

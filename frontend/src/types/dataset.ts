@@ -18,8 +18,16 @@ export type Dataset = {
   qualityScore: QualityScoreBrief;
 };
 
+export type Pagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
 export type DatasetListResponse = {
   items: Dataset[];
+  pagination: Pagination;
 };
 
 export type DatasetResource = {
