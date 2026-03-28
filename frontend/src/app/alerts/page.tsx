@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { fetchAlertById } from "@/lib/api";
 import { AlertDetail } from "@/types/alert";
+import { EmptyState } from "@/components/ui/EmptyState";
+
 
 type Props = {
     alertId: string | null;
