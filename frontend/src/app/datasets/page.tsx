@@ -1,13 +1,72 @@
 import Link from "next/link";
 import { fetchDatasets } from "@/lib/api";
 
-export default async function DatasetsPage() {
-  const data = await fetchDatasets();
+type SearchParams = Promise<{
+  page?: string;
+  keyword?: string;
+  rank?: string;
+  sort_by?: string;
+  sort_order?: string;
+}>;
+
+export default async function DatasetsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+
+  const page = Number(params.page ?? "1");
+  const keyword = params.keyword ?? "";
+  const rank = params.rank ?? "";
+  const sortBy = params.sort_by ?? "created_at";
+  const sortOrder = params.sort_order ?? "desc";
+
+  const data = await fetchDatasets({
+    page,
+    pageSize: 10,
+    keyword: keyword || undefined,
+    rank: rank || undefined,
+    sortBy,
+    sortOrder,
+  });
 
   return (
     <main style={{ padding: "32px", fontFamily: "sans-serif" }}>
       <h1>データセット一覧</h1>
       <p>登録済みデータセットを表示します。</p>
+
+      <form method="GET" style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <input
+          type="text"
+          name="keyword"
+          defaultValue={keyword}
+          placeholder="キーワード検索"
+        />
+
+        <select name="rank" defaultValue={rank}>
+          <option value="">すべてのランク</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+          <option value="E">E</option>
+        </select>
+
+        <select name="sort_by" defaultValue={sortBy}>
+          <option value="created_at">作成日</option>
+          <option value="title">タイトル</option>
+          <option value="last_updated">最終更新日</option>
+          <option value="total_score">総合スコア</option>
+        </select>
+
+        <select name="sort_order" defaultValue={sortOrder}>
+          <option value="desc">降順</option>
+          <option value="asc">昇順</option>
+        </select>
+
+        <button type="submit">検索</button>
+      </form>
 
       <div style={{ marginTop: "24px", overflowX: "auto" }}>
         <table
@@ -40,12 +99,8 @@ export default async function DatasetsPage() {
                 <tr key={dataset.datasetId}>
                   <td style={tdStyle}>{dataset.title ?? "-"}</td>
                   <td style={tdStyle}>{dataset.sourceType}</td>
-                  <td style={tdStyle}>
-                    {dataset.qualityScore?.total ?? "-"}
-                  </td>
-                  <td style={tdStyle}>
-                    {dataset.qualityScore?.rank ?? "-"}
-                  </td>
+                  <td style={tdStyle}>{dataset.qualityScore?.total ?? "-"}</td>
+                  <td style={tdStyle}>{dataset.qualityScore?.rank ?? "-"}</td>
                   <td style={tdStyle}>
                     {dataset.lastUpdated
                       ? new Date(dataset.lastUpdated).toLocaleString("ja-JP")
@@ -62,6 +117,32 @@ export default async function DatasetsPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center" }}>
+        <span>
+          Page {data.pagination.page} / {data.pagination.totalPages || 1}
+        </span>
+
+        {data.pagination.page > 1 && (
+          <Link
+            href={`/datasets?page=${data.pagination.page - 1}&keyword=${encodeURIComponent(
+              keyword,
+            )}&rank=${rank}&sort_by=${sortBy}&sort_order=${sortOrder}`}
+          >
+            前へ
+          </Link>
+        )}
+
+        {data.pagination.page < data.pagination.totalPages && (
+          <Link
+            href={`/datasets?page=${data.pagination.page + 1}&keyword=${encodeURIComponent(
+              keyword,
+            )}&rank=${rank}&sort_by=${sortBy}&sort_order=${sortOrder}`}
+          >
+            次へ
+          </Link>
+        )}
       </div>
     </main>
   );

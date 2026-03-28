@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { fetchAlerts, fetchDashboardSummary, fetchOrganizations } from "@/lib/api";
 
-export default async function DashboardPage() {
+type SearchParams = Promise<{
+  organization_id?: string;
+}>;
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const organizationId = params.organization_id;
+
   const [summary, organizations, alerts] = await Promise.all([
-    fetchDashboardSummary(),
+    fetchDashboardSummary(organizationId),
     fetchOrganizations(),
     fetchAlerts(),
   ]);
@@ -12,6 +23,20 @@ export default async function DashboardPage() {
     <main style={{ padding: "32px", fontFamily: "sans-serif" }}>
       <h1>ダッシュボード</h1>
       <p>データ品質監視ツールの全体状況を表示します。</p>
+
+      <form method="GET" style={{ marginTop: 16 }}>
+        <select name="organization_id" defaultValue={organizationId ?? ""}>
+          <option value="">全組織</option>
+          {organizations.items.map((org) => (
+            <option key={org.organizationId} value={org.organizationId}>
+              {org.displayName ?? org.name}
+            </option>
+          ))}
+        </select>
+        <button type="submit" style={{ marginLeft: 8 }}>
+          絞り込み
+        </button>
+      </form>
 
       <section style={sectionStyle}>
         <h2>サマリー</h2>
@@ -48,38 +73,6 @@ export default async function DashboardPage() {
               <td style={valueStyle}>{summary.summary.rankDistribution.D}</td>
               <td style={valueStyle}>{summary.summary.rankDistribution.E}</td>
             </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section style={sectionStyle}>
-        <h2>組織一覧</h2>
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={headerCellStyle}>組織名</th>
-              <th style={headerCellStyle}>表示名</th>
-              <th style={headerCellStyle}>ソース種別</th>
-              <th style={headerCellStyle}>有効</th>
-            </tr>
-          </thead>
-          <tbody>
-            {organizations.items.length === 0 ? (
-              <tr>
-                <td style={valueStyle} colSpan={4}>
-                  組織データがありません
-                </td>
-              </tr>
-            ) : (
-              organizations.items.map((org) => (
-                <tr key={org.organizationId}>
-                  <td style={valueStyle}>{org.name}</td>
-                  <td style={valueStyle}>{org.displayName ?? "-"}</td>
-                  <td style={valueStyle}>{org.sourceType}</td>
-                  <td style={valueStyle}>{org.isActive ? "有効" : "無効"}</td>
-                </tr>
-              ))
-            )}
           </tbody>
         </table>
       </section>
