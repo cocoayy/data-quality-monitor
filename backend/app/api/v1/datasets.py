@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.db.connection import get_connection
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
+
 
 class PatchMonitoringSettingsRequest(BaseModel):
     monitoringEnabled: bool | None = None
@@ -11,12 +12,87 @@ class PatchMonitoringSettingsRequest(BaseModel):
     expectedUpdateCycle: str | None = None
 
 
-router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
-
-
 @router.get("")
-def list_datasets() -> dict:
-    query = """
+def list_datasets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    organization_id: str | None = None,
+    source_type: str | None = None,
+    monitoring_enabled: bool | None = None,
+    evaluation_status: str | None = None,
+    rank: str | None = None,
+    min_total_score: int | None = Query(None, ge=0, le=100),
+    max_total_score: int | None = Query(None, ge=0, le=100),
+    keyword: str | None = Query(None, max_length=200),
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+) -> dict:
+    allowed_sort_by = {
+        "title": "d.title",
+        "last_updated": "d.last_updated",
+        "total_score": "q.total_score",
+        "rank": "q.rank",
+        "measured_at": "q.measured_at",
+        "created_at": "d.created_at",
+    }
+
+    if sort_by not in allowed_sort_by:
+        raise HTTPException(status_code=422, detail="invalid sort_by")
+
+    if sort_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=422, detail="invalid sort_order")
+
+    where_clauses = []
+    params = []
+
+    if organization_id:
+        where_clauses.append("d.organization_id = %s")
+        params.append(organization_id)
+
+    if source_type:
+        where_clauses.append("d.source_type = %s")
+        params.append(source_type)
+
+    if monitoring_enabled is not None:
+        where_clauses.append("d.monitoring_enabled = %s")
+        params.append(monitoring_enabled)
+
+    if evaluation_status:
+        where_clauses.append("q.evaluation_status = %s")
+        params.append(evaluation_status)
+
+    if rank:
+        where_clauses.append("q.rank = %s")
+        params.append(rank)
+
+    if min_total_score is not None:
+        where_clauses.append("q.total_score >= %s")
+        params.append(min_total_score)
+
+    if max_total_score is not None:
+        where_clauses.append("q.total_score <= %s")
+        params.append(max_total_score)
+
+    if keyword:
+        where_clauses.append("(d.title ILIKE %s OR d.description ILIKE %s)")
+        keyword_like = f"%{keyword}%"
+        params.extend([keyword_like, keyword_like])
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    offset = (page - 1) * page_size
+
+    count_query = f"""
+        SELECT COUNT(*) AS total_count
+        FROM datasets d
+        LEFT JOIN quality_score_snapshots q
+            ON q.dataset_id = d.id
+        {where_sql}
+    """
+
+    data_query = f"""
         SELECT
             d.id,
             d.organization_id,
@@ -34,13 +110,18 @@ def list_datasets() -> dict:
         FROM datasets d
         LEFT JOIN quality_score_snapshots q
             ON q.dataset_id = d.id
-        ORDER BY d.created_at DESC
-        LIMIT 100
+        {where_sql}
+        ORDER BY {allowed_sort_by[sort_by]} {sort_order}
+        LIMIT %s OFFSET %s
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query)
+            cur.execute(count_query, params)
+            count_row = cur.fetchone()
+            total_items = count_row["total_count"] if count_row else 0
+
+            cur.execute(data_query, params + [page_size, offset])
             rows = cur.fetchall()
 
     items = []
@@ -65,281 +146,14 @@ def list_datasets() -> dict:
             }
         )
 
-    return {"items": items}
-
-
-@router.get("/{dataset_id}")
-def get_dataset(dataset_id: str) -> dict:
-    dataset_query = """
-        SELECT
-            d.id,
-            d.organization_id,
-            o.name AS organization_name,
-            d.source_type,
-            d.title,
-            d.description,
-            d.license,
-            d.category,
-            d.tags,
-            d.last_updated,
-            d.expected_update_cycle,
-            d.monitoring_enabled,
-            d.excluded_from_scoring,
-            d.created_at,
-            d.updated_at,
-            q.completeness_score,
-            q.freshness_score,
-            q.accessibility_score,
-            q.format_quality_score,
-            q.total_score,
-            q.rank,
-            q.evaluation_status,
-            q.measured_at
-        FROM datasets d
-        JOIN organizations o
-            ON o.id = d.organization_id
-        LEFT JOIN quality_score_snapshots q
-            ON q.dataset_id = d.id
-        WHERE d.id = %s
-    """
-
-    resources_query = """
-        SELECT
-            r.id,
-            r.resource_type,
-            r.format,
-            r.resource_url,
-            r.api_endpoint,
-            r.is_monitoring_target,
-            r.latest_http_status,
-            r.latest_response_time_ms,
-            r.latest_checked_at
-        FROM dataset_resources r
-        WHERE r.dataset_id = %s
-        ORDER BY r.created_at ASC
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(dataset_query, (dataset_id,))
-            dataset = cur.fetchone()
-
-            if not dataset:
-                raise HTTPException(status_code=404, detail="dataset not found")
-
-            cur.execute(resources_query, (dataset_id,))
-            resources = cur.fetchall()
-
-    resource_items = []
-    for resource in resources:
-        resource_items.append(
-            {
-                "resourceId": str(resource["id"]),
-                "resourceType": resource["resource_type"],
-                "format": resource["format"],
-                "resourceUrl": resource["resource_url"],
-                "apiEndpoint": resource["api_endpoint"],
-                "isMonitoringTarget": resource["is_monitoring_target"],
-                "latestHttpStatus": resource["latest_http_status"],
-                "latestResponseTimeMs": resource["latest_response_time_ms"],
-                "latestCheckedAt": resource["latest_checked_at"].isoformat() if resource["latest_checked_at"] else None,
-            }
-        )
+    total_pages = (total_items + page_size - 1) // page_size if total_items > 0 else 0
 
     return {
-        "datasetId": str(dataset["id"]),
-        "organization": {
-            "organizationId": str(dataset["organization_id"]),
-            "name": dataset["organization_name"],
-        },
-        "sourceType": dataset["source_type"],
-        "title": dataset["title"],
-        "description": dataset["description"],
-        "license": dataset["license"],
-        "category": dataset["category"],
-        "tags": dataset["tags"],
-        "lastUpdated": dataset["last_updated"].isoformat() if dataset["last_updated"] else None,
-        "expectedUpdateCycle": dataset["expected_update_cycle"],
-        "monitoringEnabled": dataset["monitoring_enabled"],
-        "excludedFromScoring": dataset["excluded_from_scoring"],
-        "createdAt": dataset["created_at"].isoformat() if dataset["created_at"] else None,
-        "updatedAt": dataset["updated_at"].isoformat() if dataset["updated_at"] else None,
-        "latestQualityScore": {
-            "completeness": dataset["completeness_score"],
-            "freshness": dataset["freshness_score"],
-            "accessibility": dataset["accessibility_score"],
-            "formatQuality": dataset["format_quality_score"],
-            "total": dataset["total_score"],
-            "rank": dataset["rank"],
-            "evaluationStatus": dataset["evaluation_status"],
-            "measuredAt": dataset["measured_at"].isoformat() if dataset["measured_at"] else None,
-        },
-        "resources": resource_items,
-    }
-
-
-@router.get("/{dataset_id}/quality-score/history")
-def get_dataset_quality_score_history(dataset_id: str) -> dict:
-    dataset_exists_query = """
-        SELECT 1
-        FROM datasets
-        WHERE id = %s
-    """
-
-    history_query = """
-        SELECT
-            measured_date,
-            completeness_score,
-            freshness_score,
-            accessibility_score,
-            format_quality_score,
-            total_score,
-            rank,
-            evaluation_status
-        FROM quality_score_history
-        WHERE dataset_id = %s
-        ORDER BY measured_date ASC
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(dataset_exists_query, (dataset_id,))
-            exists = cur.fetchone()
-
-            if not exists:
-                raise HTTPException(status_code=404, detail="dataset not found")
-
-            cur.execute(history_query, (dataset_id,))
-            rows = cur.fetchall()
-
-    history = []
-    for row in rows:
-        history.append(
-            {
-                "measuredDate": row["measured_date"].isoformat(),
-                "scores": {
-                    "completeness": row["completeness_score"],
-                    "freshness": row["freshness_score"],
-                    "accessibility": row["accessibility_score"],
-                    "formatQuality": row["format_quality_score"],
-                    "total": row["total_score"],
-                    "rank": row["rank"],
-                    "evaluationStatus": row["evaluation_status"],
-                },
-            }
-        )
-
-    return {
-        "datasetId": dataset_id,
-        "history": history,
-    }
-
-
-@router.get("/{dataset_id}/quality-score/reasons")
-def get_dataset_quality_score_reasons(dataset_id: str) -> dict:
-    dataset_exists_query = """
-        SELECT 1
-        FROM datasets
-        WHERE id = %s
-    """
-
-    reasons_query = """
-        SELECT
-            metric_type,
-            reason_code,
-            severity,
-            message,
-            detail_json
-        FROM quality_score_reasons
-        WHERE dataset_id = %s
-        ORDER BY created_at ASC
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(dataset_exists_query, (dataset_id,))
-            exists = cur.fetchone()
-
-            if not exists:
-                raise HTTPException(status_code=404, detail="dataset not found")
-
-            cur.execute(reasons_query, (dataset_id,))
-            rows = cur.fetchall()
-
-    items = []
-    for row in rows:
-        items.append(
-            {
-                "metricType": row["metric_type"],
-                "reasonCode": row["reason_code"],
-                "severity": row["severity"],
-                "message": row["message"],
-                "detail": row["detail_json"],
-            }
-        )
-
-    return {
-        "datasetId": dataset_id,
         "items": items,
-    }
-
-
-@router.patch("/{dataset_id}/monitoring-settings")
-def patch_monitoring_settings(
-    dataset_id: str,
-    request: PatchMonitoringSettingsRequest,
-) -> dict:
-    valid_cycles = {"daily", "weekly", "monthly", "quarterly", "yearly", "unknown"}
-
-    if request.expectedUpdateCycle is not None and request.expectedUpdateCycle not in valid_cycles:
-        raise HTTPException(status_code=422, detail="invalid expectedUpdateCycle")
-
-    update_fields = []
-    params = []
-
-    if request.monitoringEnabled is not None:
-        update_fields.append("monitoring_enabled = %s")
-        params.append(request.monitoringEnabled)
-
-    if request.excludedFromScoring is not None:
-        update_fields.append("excluded_from_scoring = %s")
-        params.append(request.excludedFromScoring)
-
-    if request.expectedUpdateCycle is not None:
-        update_fields.append("expected_update_cycle = %s")
-        params.append(request.expectedUpdateCycle)
-
-    if not update_fields:
-        raise HTTPException(status_code=400, detail="no fields to update")
-
-    update_fields.append("updated_at = now()")
-    params.append(dataset_id)
-
-    update_query = f"""
-        UPDATE datasets
-        SET {", ".join(update_fields)}
-        WHERE id = %s
-        RETURNING
-            id,
-            monitoring_enabled,
-            excluded_from_scoring,
-            expected_update_cycle,
-            updated_at
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(update_query, params)
-            row = cur.fetchone()
-            conn.commit()
-
-    if not row:
-        raise HTTPException(status_code=404, detail="dataset not found")
-
-    return {
-        "datasetId": str(row["id"]),
-        "monitoringEnabled": row["monitoring_enabled"],
-        "excludedFromScoring": row["excluded_from_scoring"],
-        "expectedUpdateCycle": row["expected_update_cycle"],
-        "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+        "pagination": {
+            "page": page,
+            "pageSize": page_size,
+            "totalItems": total_items,
+            "totalPages": total_pages,
+        },
     }

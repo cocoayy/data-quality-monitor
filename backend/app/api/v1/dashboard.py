@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.db.connection import get_connection
 
@@ -6,49 +6,72 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
 
 @router.get("/summary")
-def get_dashboard_summary() -> dict:
-    datasets_query = """
+def get_dashboard_summary(
+    organization_id: str | None = Query(None),
+) -> dict:
+    dataset_where = ""
+    score_where = ""
+    alert_where = ""
+    params: list[str] = []
+
+    if organization_id:
+        dataset_where = "WHERE d.organization_id = %s"
+        score_where = "WHERE d.organization_id = %s"
+        alert_where = "WHERE d.organization_id = %s"
+        params = [organization_id]
+
+    datasets_query = f"""
         SELECT COUNT(*) AS total_datasets
-        FROM datasets
+        FROM datasets d
+        {dataset_where}
     """
 
-    evaluated_query = """
+    evaluated_query = f"""
         SELECT
-            COUNT(*) FILTER (WHERE evaluation_status IN ('success', 'partial')) AS evaluated_datasets,
-            COUNT(*) FILTER (WHERE evaluation_status = 'unevaluable') AS unevaluable_datasets,
-            AVG(total_score) AS average_total_score
-        FROM quality_score_snapshots
+            COUNT(*) FILTER (WHERE q.evaluation_status IN ('success', 'partial')) AS evaluated_datasets,
+            COUNT(*) FILTER (WHERE q.evaluation_status = 'unevaluable') AS unevaluable_datasets,
+            AVG(q.total_score) AS average_total_score
+        FROM quality_score_snapshots q
+        JOIN datasets d
+            ON d.id = q.dataset_id
+        {score_where}
     """
 
-    rank_distribution_query = """
+    rank_distribution_query = f"""
         SELECT
-            COUNT(*) FILTER (WHERE rank = 'A') AS rank_a,
-            COUNT(*) FILTER (WHERE rank = 'B') AS rank_b,
-            COUNT(*) FILTER (WHERE rank = 'C') AS rank_c,
-            COUNT(*) FILTER (WHERE rank = 'D') AS rank_d,
-            COUNT(*) FILTER (WHERE rank = 'E') AS rank_e
-        FROM quality_score_snapshots
+            COUNT(*) FILTER (WHERE q.rank = 'A') AS rank_a,
+            COUNT(*) FILTER (WHERE q.rank = 'B') AS rank_b,
+            COUNT(*) FILTER (WHERE q.rank = 'C') AS rank_c,
+            COUNT(*) FILTER (WHERE q.rank = 'D') AS rank_d,
+            COUNT(*) FILTER (WHERE q.rank = 'E') AS rank_e
+        FROM quality_score_snapshots q
+        JOIN datasets d
+            ON d.id = q.dataset_id
+        {score_where}
     """
 
-    alert_query = """
+    alert_query = f"""
         SELECT
-            COUNT(*) FILTER (WHERE severity = 'critical') AS critical_alerts,
-            COUNT(*) FILTER (WHERE severity = 'warning') AS warning_alerts
-        FROM alert_events
+            COUNT(*) FILTER (WHERE a.severity = 'critical') AS critical_alerts,
+            COUNT(*) FILTER (WHERE a.severity = 'warning') AS warning_alerts
+        FROM alert_events a
+        JOIN datasets d
+            ON d.id = a.dataset_id
+        {alert_where}
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(datasets_query)
+            cur.execute(datasets_query, params)
             datasets_row = cur.fetchone()
 
-            cur.execute(evaluated_query)
+            cur.execute(evaluated_query, params)
             evaluated_row = cur.fetchone()
 
-            cur.execute(rank_distribution_query)
+            cur.execute(rank_distribution_query, params)
             rank_row = cur.fetchone()
 
-            cur.execute(alert_query)
+            cur.execute(alert_query, params)
             alert_row = cur.fetchone()
 
     return {
