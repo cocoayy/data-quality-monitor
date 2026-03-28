@@ -1,32 +1,30 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.db.connection import get_connection
+from app.repositories.alert_repository import AlertRepository
+from app.services.alert_service import AlertService
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
 
 @router.get("")
-def list_alerts() -> dict:
-    query = """
-        SELECT
-            a.id,
-            a.dataset_id,
-            d.title AS dataset_title,
-            d.organization_id,
-            a.alert_type,
-            a.severity,
-            a.message,
-            a.measured_at
-        FROM alert_events a
-        JOIN datasets d
-            ON d.id = a.dataset_id
-        ORDER BY a.measured_at DESC
-    """
-
+def list_alerts(
+    dataset_id: str | None = None,
+    organization_id: str | None = None,
+    alert_type: str | None = None,
+    severity: str | None = None,
+    keyword: str | None = Query(None, max_length=200),
+) -> dict:
     with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            rows = cur.fetchall()
+        repository = AlertRepository(conn)
+        service = AlertService(repository)
+        rows = service.list_alerts(
+            dataset_id=dataset_id,
+            organization_id=organization_id,
+            alert_type=alert_type,
+            severity=severity,
+            keyword=keyword,
+        )
 
     items = []
     for row in rows:
@@ -48,23 +46,10 @@ def list_alerts() -> dict:
 
 @router.get("/{alert_id}")
 def get_alert(alert_id: str) -> dict:
-    query = """
-        SELECT
-            id,
-            dataset_id,
-            alert_type,
-            severity,
-            message,
-            measured_at,
-            payload_json
-        FROM alert_events
-        WHERE id = %s
-    """
-
     with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, (alert_id,))
-            row = cur.fetchone()
+        repository = AlertRepository(conn)
+        service = AlertService(repository)
+        row = service.get_alert_by_id(alert_id)
 
     if not row:
         raise HTTPException(status_code=404, detail="alert not found")
