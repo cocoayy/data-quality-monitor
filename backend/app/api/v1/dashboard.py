@@ -92,3 +92,55 @@ def get_dashboard_summary(
             "warningAlerts": alert_row["warning_alerts"] or 0,
         },
     }
+
+
+@router.get("/history")
+def get_dashboard_history(
+    organization_id: str | None = Query(None),
+) -> dict:
+    where_sql = ""
+    params: list[str] = []
+
+    if organization_id:
+        where_sql = "WHERE d.organization_id = %s"
+        params.append(organization_id)
+
+    query = f"""
+        SELECT
+            h.measured_date,
+            ROUND(AVG(h.total_score)::numeric, 1) AS average_total_score,
+            COUNT(*) FILTER (WHERE h.rank = 'A') AS rank_a,
+            COUNT(*) FILTER (WHERE h.rank = 'B') AS rank_b,
+            COUNT(*) FILTER (WHERE h.rank = 'C') AS rank_c,
+            COUNT(*) FILTER (WHERE h.rank = 'D') AS rank_d,
+            COUNT(*) FILTER (WHERE h.rank = 'E') AS rank_e
+        FROM quality_score_history h
+        JOIN datasets d
+            ON d.id = h.dataset_id
+        {where_sql}
+        GROUP BY h.measured_date
+        ORDER BY h.measured_date ASC
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+    items = []
+    for row in rows:
+        items.append(
+            {
+                "measuredDate": row["measured_date"].isoformat(),
+                "averageTotalScore": float(row["average_total_score"]) if row["average_total_score"] is not None else 0.0,
+                "rankDistribution": {
+                    "A": row["rank_a"] or 0,
+                    "B": row["rank_b"] or 0,
+                    "C": row["rank_c"] or 0,
+                    "D": row["rank_d"] or 0,
+                    "E": row["rank_e"] or 0,
+                },
+            }
+        )
+
+    return {"items": items}

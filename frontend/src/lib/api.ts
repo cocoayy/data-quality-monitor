@@ -1,5 +1,9 @@
 import { AlertDetail, AlertListResponse } from "@/types/alert";
-import { DashboardSummaryResponse, OrganizationListResponse } from "@/types/dashboard";
+import {
+  DashboardHistoryResponse,
+  DashboardSummaryResponse,
+  OrganizationListResponse,
+} from "@/types/dashboard";
 import {
   DatasetDetailResponse,
   DatasetListResponse,
@@ -102,8 +106,32 @@ export async function fetchDashboardSummary(
   return fetchJson<DashboardSummaryResponse>(`/api/v1/dashboard/summary${query}`);
 }
 
-export async function fetchAlerts(): Promise<AlertListResponse> {
-  return fetchJson<AlertListResponse>("/api/v1/alerts");
+export async function fetchDashboardHistory(
+  organizationId?: string,
+): Promise<DashboardHistoryResponse> {
+  const query = organizationId
+    ? `?organization_id=${encodeURIComponent(organizationId)}`
+    : "";
+  return fetchJson<DashboardHistoryResponse>(`/api/v1/dashboard/history${query}`);
+}
+
+export async function fetchAlerts(params?: {
+  datasetId?: string;
+  organizationId?: string;
+  alertType?: string;
+  severity?: string;
+  keyword?: string;
+}): Promise<AlertListResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (params?.datasetId) searchParams.set("dataset_id", params.datasetId);
+  if (params?.organizationId) searchParams.set("organization_id", params.organizationId);
+  if (params?.alertType) searchParams.set("alert_type", params.alertType);
+  if (params?.severity) searchParams.set("severity", params.severity);
+  if (params?.keyword) searchParams.set("keyword", params.keyword);
+
+  const query = searchParams.toString();
+  return fetchJson<AlertListResponse>(`/api/v1/alerts${query ? `?${query}` : ""}`);
 }
 
 export async function fetchAlertById(alertId: string): Promise<AlertDetail> {

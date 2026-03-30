@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { fetchAlerts, fetchDashboardSummary, fetchOrganizations } from "@/lib/api";
+import {
+  fetchAlerts,
+  fetchDashboardHistory,
+  fetchDashboardSummary,
+  fetchOrganizations,
+} from "@/lib/api";
+import { DashboardHistoryChart } from "@/components/DashboardHistoryChart";
 
 type SearchParams = Promise<{
   organization_id?: string;
@@ -13,8 +19,9 @@ export default async function DashboardPage({
   const params = await searchParams;
   const organizationId = params.organization_id;
 
-  const [summary, organizations, alerts] = await Promise.all([
+  const [summary, history, organizations, alerts] = await Promise.all([
     fetchDashboardSummary(organizationId),
+    fetchDashboardHistory(organizationId),
     fetchOrganizations(),
     fetchAlerts(),
   ]);
@@ -51,6 +58,11 @@ export default async function DashboardPage({
           <SummaryCard label="Critical Alerts" value={summary.summary.criticalAlerts} />
           <SummaryCard label="Warning Alerts" value={summary.summary.warningAlerts} />
         </div>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2>平均スコア推移</h2>
+        <DashboardHistoryChart items={history.items} />
       </section>
 
       <section style={sectionStyle}>
