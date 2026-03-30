@@ -1,103 +1,127 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchAlertById } from "@/lib/api";
-import { AlertDetail } from "@/types/alert";
+import Link from "next/link";
+import { fetchAlerts } from "@/lib/api";
+import { AlertSummary } from "@/types/alert";
+import { AlertDetailModal } from "@/components/AlertDetailModal";
 import { EmptyState } from "@/components/ui/EmptyState";
 
+export default function AlertsPage() {
+    const [items, setItems] = useState<AlertSummary[]>([]);
+    const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
 
-type Props = {
-    alertId: string | null;
-    onClose: () => void;
-};
+    const [severity, setSeverity] = useState("");
+    const [alertType, setAlertType] = useState("");
+    const [keyword, setKeyword] = useState("");
 
-export function AlertDetailModal({ alertId, onClose }: Props) {
-    const [alert, setAlert] = useState<AlertDetail | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const load = async () => {
+        const data = await fetchAlerts({
+            severity: severity || undefined,
+            alertType: alertType || undefined,
+            keyword: keyword || undefined,
+        });
+        setItems(data.items);
+    };
 
     useEffect(() => {
-        if (!alertId) return;
-
-        const load = async () => {
-            setLoading(true);
-            setError(null);
-
-            try {
-                const data = await fetchAlertById(alertId);
-                setAlert(data);
-            } catch {
-                setError("アラート詳細の取得に失敗しました。");
-            } finally {
-                setLoading(false);
-            }
-        };
-
         load();
-    }, [alertId]);
-
-    if (!alertId) return null;
+    }, []);
 
     return (
-        <div style={overlayStyle} onClick={onClose}>
-            <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <h3 style={{ marginTop: 0 }}>アラート詳細</h3>
-                    <button onClick={onClose}>閉じる</button>
-                </div>
+        <main style={{ padding: "32px", fontFamily: "sans-serif" }}>
+            <h1>アラート一覧</h1>
+            <p>発生中・過去のアラートを確認します。</p>
 
-                {loading && <p>読み込み中...</p>}
-                {error && <p>{error}</p>}
+            <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+                <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
+                    <option value="">全重要度</option>
+                    <option value="critical">critical</option>
+                    <option value="warning">warning</option>
+                    <option value="info">info</option>
+                </select>
 
-                {!loading && !error && alert && (
-                    <div style={{ display: "grid", gap: 12 }}>
-                        <div><strong>alertId:</strong> {alert.alertId}</div>
-                        <div><strong>datasetId:</strong> {alert.datasetId}</div>
-                        <div><strong>alertType:</strong> {alert.alertType}</div>
-                        <div><strong>severity:</strong> {alert.severity}</div>
-                        <div><strong>message:</strong> {alert.message}</div>
-                        <div>
-                            <strong>measuredAt:</strong>{" "}
-                            {alert.measuredAt
-                                ? new Date(alert.measuredAt).toLocaleString("ja-JP")
-                                : "-"}
-                        </div>
+                <select value={alertType} onChange={(e) => setAlertType(e.target.value)}>
+                    <option value="">全種別</option>
+                    <option value="low_total_score">low_total_score</option>
+                    <option value="stale_dataset">stale_dataset</option>
+                    <option value="inaccessible_dataset">inaccessible_dataset</option>
+                    <option value="sudden_score_drop">sudden_score_drop</option>
+                </select>
 
-                        <div>
-                            <strong>payload:</strong>
-                            <pre
-                                style={{
-                                    marginTop: 8,
-                                    padding: 12,
-                                    backgroundColor: "#f7f7f7",
-                                    borderRadius: 6,
-                                    overflowX: "auto",
-                                }}
-                            >
-                                {JSON.stringify(alert.payload, null, 2)}
-                            </pre>
-                        </div>
-                    </div>
-                )}
+                <input
+                    type="text"
+                    placeholder="キーワード検索"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                />
+
+                <button onClick={load}>検索</button>
             </div>
-        </div>
+
+            {items.length === 0 ? (
+                <EmptyState message="アラートはありません。" />
+            ) : (
+                <table style={tableStyle}>
+                    <thead>
+                        <tr>
+                            <th style={headerCellStyle}>日時</th>
+                            <th style={headerCellStyle}>重要度</th>
+                            <th style={headerCellStyle}>種別</th>
+                            <th style={headerCellStyle}>データセット</th>
+                            <th style={headerCellStyle}>メッセージ</th>
+                            <th style={headerCellStyle}>詳細</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.map((alert) => (
+                            <tr key={alert.alertId}>
+                                <td style={valueStyle}>
+                                    {alert.measuredAt
+                                        ? new Date(alert.measuredAt).toLocaleString("ja-JP")
+                                        : "-"}
+                                </td>
+                                <td style={valueStyle}>{alert.severity}</td>
+                                <td style={valueStyle}>{alert.alertType}</td>
+                                <td style={valueStyle}>
+                                    <Link href={`/datasets/${alert.datasetId}`}>
+                                        {alert.datasetTitle}
+                                    </Link>
+                                </td>
+                                <td style={valueStyle}>{alert.message}</td>
+                                <td style={valueStyle}>
+                                    <button onClick={() => setSelectedAlertId(alert.alertId)}>
+                                        詳細
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+
+            <AlertDetailModal
+                alertId={selectedAlertId}
+                onClose={() => setSelectedAlertId(null)}
+            />
+        </main>
     );
 }
 
-const overlayStyle: React.CSSProperties = {
-    position: "fixed",
-    inset: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
+const tableStyle: React.CSSProperties = {
+    width: "100%",
+    borderCollapse: "collapse",
+    marginTop: 12,
 };
 
-const modalStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 720,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 24,
+const headerCellStyle: React.CSSProperties = {
+    padding: 12,
+    borderBottom: "1px solid #ccc",
+    textAlign: "left",
+    backgroundColor: "#f5f5f5",
+};
+
+const valueStyle: React.CSSProperties = {
+    padding: 12,
+    borderBottom: "1px solid #ddd",
 };

@@ -30,3 +30,19 @@ export type DashboardSummaryResponse = {
     warningAlerts: number;
   };
 };
+
+export type DashboardHistoryItem = {
+  measuredDate: string;
+  averageTotalScore: number;
+  rankDistribution: {
+    A: number;
+    B: number;
+    C: number;
+    D: number;
+    E: number;
+  };
+};
+
+export type DashboardHistoryResponse = {
+  items: DashboardHistoryItem[];
+};
